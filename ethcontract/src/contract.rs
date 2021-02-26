@@ -7,6 +7,7 @@ mod event;
 mod method;
 
 use crate::errors::{DeployError, LinkError};
+use crate::tokens::MultiTokenize;
 use ethcontract_common::abi::{Error as AbiError, Result as AbiResult};
 use ethcontract_common::abiext::FunctionExt;
 use ethcontract_common::hash::H32;
@@ -14,7 +15,6 @@ use ethcontract_common::{Abi, Artifact, Bytecode};
 use std::collections::HashMap;
 use std::hash::Hash;
 use web3::api::Web3;
-use web3::contract::tokens::{Detokenize, Tokenize};
 use web3::types::{Address, Bytes, H256};
 use web3::Transport;
 
@@ -23,7 +23,7 @@ pub use self::event::{
     AllEventsBuilder, Event, EventBuilder, EventMetadata, EventStatus, ParseLog, RawLog,
     StreamEvent, Topic,
 };
-pub use self::method::{Detokenizable, MethodBuilder, MethodDefaults, ViewMethodBuilder, Void};
+pub use self::method::{MethodBuilder, MethodDefaults, Return, ViewMethodBuilder, Void};
 
 /// Represents a contract instance at an address. Provides methods for
 /// contract interaction.
@@ -112,7 +112,7 @@ impl<T: Transport> Instance<T> {
         params: P,
     ) -> Result<DeployBuilder<T, Self>, DeployError>
     where
-        P: Tokenize,
+        P: MultiTokenize,
     {
         Linker::new(artifact).deploy(web3, params)
     }
@@ -126,7 +126,7 @@ impl<T: Transport> Instance<T> {
         libraries: I,
     ) -> Result<DeployBuilder<T, Self>, DeployError>
     where
-        P: Tokenize,
+        P: MultiTokenize,
         I: Iterator<Item = (&'a str, Address)>,
     {
         let mut linker = Linker::new(artifact);
@@ -163,8 +163,8 @@ impl<T: Transport> Instance<T> {
     /// actually commit anything to the block chain.
     pub fn method<P, R>(&self, signature: H32, params: P) -> AbiResult<MethodBuilder<T, R>>
     where
-        P: Tokenize,
-        R: Detokenizable,
+        P: MultiTokenize,
+        R: Return,
     {
         let signature = signature.as_ref();
         let function = self
@@ -191,8 +191,8 @@ impl<T: Transport> Instance<T> {
     /// state.
     pub fn view_method<P, R>(&self, signature: H32, params: P) -> AbiResult<ViewMethodBuilder<T, R>>
     where
-        P: Tokenize,
-        R: Detokenizable,
+        P: MultiTokenize,
+        R: Return,
     {
         Ok(self.method(signature, params)?.view())
     }
@@ -221,7 +221,7 @@ impl<T: Transport> Instance<T> {
     /// that emits events for the specified Solidity event by name.
     pub fn event<E>(&self, signature: H256) -> AbiResult<EventBuilder<T, E>>
     where
-        E: Detokenize,
+        E: MultiTokenize,
     {
         let event = self
             .events
@@ -286,7 +286,7 @@ impl Linker {
     ) -> Result<DeployBuilder<T, Instance<T>>, DeployError>
     where
         T: Transport,
-        P: Tokenize,
+        P: MultiTokenize,
     {
         DeployBuilder::new(web3, self, params)
     }

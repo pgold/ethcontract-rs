@@ -2,12 +2,12 @@
 //! new contracts.
 
 use crate::errors::{DeployError, ExecutionError};
+use crate::tokens::MultiTokenize;
 use crate::transaction::{Account, GasPrice, TransactionBuilder, TransactionResult};
 use ethcontract_common::abi::Error as AbiError;
 use ethcontract_common::{Abi, Bytecode};
 use std::marker::PhantomData;
 use web3::api::Web3;
-use web3::contract::tokens::Tokenize;
 use web3::types::{Address, Bytes, H256, U256};
 use web3::Transport;
 
@@ -62,7 +62,7 @@ where
     /// deployment (constructor) parameters.
     pub fn new<P>(web3: Web3<T>, context: I::Context, params: P) -> Result<Self, DeployError>
     where
-        P: Tokenize,
+        P: MultiTokenize,
     {
         // NOTE(nlordell): unfortunately here we have to re-implement some
         //   `rust-web3` code so that we can add things like signing support;

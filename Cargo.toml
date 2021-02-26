@@ -8,3 +8,10 @@ members = [
   "examples/documentation",
   "examples/generate",
 ]
+
+[patch.crates-io]
+# The original ethabi crate cannot handle abi v2. A fork available at the following git repository
+# has patches applied to do this. We use a patch for this instead of just changing the dependency
+# because our code that uses ethabi interacts with rust-web3 which also uses ethabi which is not
+# possible if the types come from different crates.
+ethabi = { git = "https://github.com/gakonst/ethabi.git", rev ="3d415cf6f41629eecf95f3e3046083c5d417b384" }

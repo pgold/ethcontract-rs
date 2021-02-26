@@ -3,63 +3,59 @@
 //! [Instance::method](ethcontract::contract::Instance::method).
 
 use crate::transaction::{Account, GasPrice, TransactionBuilder, TransactionResult};
+use crate::{batch::CallBatch, errors::MethodError};
 use crate::{
-    batch::CallBatch,
-    errors::{revert, ExecutionError, MethodError},
+    errors::{revert, ExecutionError},
+    tokens::{Error as TokenError, SingleTokenize},
 };
 use ethcontract_common::abi::{Function, Token};
 use std::marker::PhantomData;
-use web3::contract::tokens::Detokenize;
-use web3::contract::Error as Web3ContractError;
 use web3::types::{Address, BlockId, Bytes, CallRequest, U256};
 use web3::Transport;
 use web3::{api::Web3, BatchTransport};
 
-/// A void type to represent methods with empty return types.
-///
-/// This is used to work around the fact that `(): !Detokenize`.
-pub struct Void(());
-
-/// Represents a type can detokenize a result.
-pub trait Detokenizable {
-    /// The output that this type detokenizes into.
-    type Output;
-
-    /// Create an instance of `Output` by decoding tokens.
-    fn from_tokens(tokens: Vec<Token>) -> Result<Self::Output, ExecutionError>;
-
-    /// Returns true if this is an empty type.
-    fn is_void() -> bool {
-        false
-    }
+/// TODO
+pub trait Return {
+    /// TODO
+    type Output: SingleTokenize;
+    /// TODO
+    fn is_void() -> bool;
+    /// TODO
+    fn from_tokens(tokens: Vec<Token>) -> Result<Self::Output, TokenError>;
 }
 
-impl Detokenizable for Void {
+/// TODO
+pub struct Void;
+impl Return for Void {
     type Output = ();
-
-    fn from_tokens(tokens: Vec<Token>) -> Result<Self::Output, ExecutionError> {
-        if !tokens.is_empty() {
-            return Err(Web3ContractError::InvalidOutputType(format!(
-                "Expected no elements, got tokens: {:?}",
-                tokens
-            ))
-            .into());
-        }
-
-        Ok(())
-    }
 
     fn is_void() -> bool {
         true
     }
+
+    fn from_tokens(tokens: Vec<Token>) -> Result<Self::Output, TokenError> {
+        if !tokens.is_empty() {
+            return Err(TokenError::A);
+        }
+        Ok(())
+    }
 }
 
-impl<T: Detokenize> Detokenizable for T {
-    type Output = Self;
+impl<T> Return for T
+where
+    T: SingleTokenize,
+{
+    type Output = T;
 
-    fn from_tokens(tokens: Vec<Token>) -> Result<Self::Output, ExecutionError> {
-        let result = <T as Detokenize>::from_tokens(tokens)?;
-        Ok(result)
+    fn is_void() -> bool {
+        false
+    }
+
+    fn from_tokens(tokens: Vec<Token>) -> Result<Self::Output, TokenError> {
+        if tokens.len() != 1 {
+            return Err(TokenError::A);
+        }
+        Self::Output::from_token(tokens.into_iter().next().unwrap())
     }
 }
 
@@ -79,7 +75,7 @@ pub struct MethodDefaults {
 /// transactions. This is useful when dealing with view functions.
 #[derive(Debug, Clone)]
 #[must_use = "methods do nothing unless you `.call()` or `.send()` them"]
-pub struct MethodBuilder<T: Transport, R: Detokenizable> {
+pub struct MethodBuilder<T: Transport, R: Return> {
     web3: Web3<T>,
     function: Function,
     /// transaction parameters
@@ -92,17 +88,20 @@ impl<T: Transport> MethodBuilder<T, Void> {
     pub fn fallback(web3: Web3<T>, address: Address, data: Bytes) -> Self {
         // NOTE: We create a fake `Function` entry for the fallback method. This
         //   is OK since it is only ever used for error formatting purposes.
+
+        #[allow(deprecated)]
         let function = Function {
             name: "fallback".into(),
             inputs: vec![],
             outputs: vec![],
             constant: false,
+            state_mutability: Default::default(),
         };
         MethodBuilder::new(web3, function, address, data)
     }
 }
 
-impl<T: Transport, R: Detokenizable> MethodBuilder<T, R> {
+impl<T: Transport, R: Return> MethodBuilder<T, R> {
     /// Creates a new builder for a transaction.
     pub fn new(web3: Web3<T>, function: Function, address: Address, data: Bytes) -> Self {
         MethodBuilder {
@@ -197,14 +196,14 @@ impl<T: Transport, R: Detokenizable> MethodBuilder<T, R> {
 /// directly send transactions and is for read only method calls.
 #[derive(Debug, Clone)]
 #[must_use = "view methods do nothing unless you `.call()` them"]
-pub struct ViewMethodBuilder<T: Transport, R: Detokenizable> {
+pub struct ViewMethodBuilder<T: Transport, R: Return> {
     /// method parameters
     pub m: MethodBuilder<T, R>,
     /// optional block number
     pub block: Option<BlockId>,
 }
 
-impl<T: Transport, R: Detokenizable> ViewMethodBuilder<T, R> {
+impl<T: Transport, R: Return> ViewMethodBuilder<T, R> {
     /// Create a new `ViewMethodBuilder` by demoting a `MethodBuilder`.
     pub fn from_method(method: MethodBuilder<T, R>) -> Self {
         ViewMethodBuilder {
@@ -254,7 +253,7 @@ impl<T: Transport, R: Detokenizable> ViewMethodBuilder<T, R> {
     }
 }
 
-impl<T: Transport, R: Detokenizable> ViewMethodBuilder<T, R> {
+impl<T: Transport, R: Return> ViewMethodBuilder<T, R> {
     /// Call a contract method. Contract calls do not modify the blockchain and
     /// as such do not require gas or signing.
     pub async fn call(self) -> Result<R::Output, MethodError> {
@@ -294,7 +293,7 @@ impl<T: Transport, R: Detokenizable> ViewMethodBuilder<T, R> {
 
 async fn convert_response<
     F: std::future::Future<Output = Result<Bytes, web3::Error>>,
-    R: Detokenizable,
+    R: Return,
 >(
     future: F,
     function: Function,
@@ -316,7 +315,7 @@ async fn convert_response<
 /// encode this information in a JSON RPC error. On a revert or invalid opcode,
 /// the result is `0x` (empty data), while on a revert with message, it is an
 /// ABI encoded `Error(string)` function call data.
-fn decode_geth_call_result<R: Detokenizable>(
+fn decode_geth_call_result<R: Return>(
     function: &Function,
     bytes: Vec<u8>,
 ) -> Result<R::Output, ExecutionError> {
@@ -345,6 +344,7 @@ mod tests {
     use ethcontract_common::abi::{Param, ParamType};
 
     fn test_abi_function() -> (Function, Bytes) {
+        #[allow(deprecated)]
         let function = Function {
             name: "test".to_owned(),
             inputs: Vec::new(),
@@ -353,6 +353,7 @@ mod tests {
                 kind: ParamType::Uint(256),
             }],
             constant: false,
+            state_mutability: Default::default(),
         };
         let data = function
             .encode_input(&[])

@@ -1,7 +1,7 @@
 use crate::contract::{types, Context};
 use crate::util;
 use anyhow::{anyhow, Context as _, Result};
-use ethcontract_common::abi::{Function, Param};
+use ethcontract_common::abi::{Function, Param, StateMutability};
 use ethcontract_common::abiext::FunctionExt;
 use ethcontract_common::hash::H32;
 use inflector::Inflector;
@@ -29,8 +29,14 @@ fn expand_functions(cx: &Context) -> Result<TokenStream> {
         .functions()
         .map(|function| {
             let signature = function.abi_signature();
-            expand_function(&cx, function, aliases.remove(&signature))
-                .with_context(|| format!("error expanding function '{}'", signature))
+            let a = expand_function(&cx, function, aliases.remove(&signature))
+                .with_context(|| format!("error expanding function '{}'", signature));
+            // Just for debugging
+            let a = a.unwrap();
+            if function.name.starts_with("foo") || function.name == "getI256" {
+                dbg!(&function, a.to_string());
+            }
+            Ok(a)
         })
         .collect::<Result<Vec<_>>>()?;
     if let Some(unused) = aliases.keys().next() {
@@ -104,10 +110,11 @@ fn expand_function(cx: &Context, function: &Function, alias: Option<Ident>) -> R
 
     let input = expand_inputs(&function.inputs)?;
     let outputs = expand_fn_outputs(&function.outputs)?;
-    let (method, result_type_name) = if function.constant {
-        (quote! { view_method }, quote! { DynViewMethodBuilder })
-    } else {
-        (quote! { method }, quote! { DynMethodBuilder })
+    let (method, result_type_name) = match function.state_mutability {
+        StateMutability::Pure | StateMutability::View => {
+            (quote! { view_method }, quote! { DynViewMethodBuilder })
+        }
+        _ => (quote! { method }, quote! { DynMethodBuilder }),
     };
     let result = quote! { self::ethcontract::dyns::#result_type_name<#outputs> };
     let arg = expand_inputs_call_arg(&function.inputs);

@@ -5,7 +5,7 @@ ethcontract::contract!("examples/truffle/build/contracts/AbiTypes.json");
 
 #[tokio::main]
 async fn main() {
-    let http = Http::new("http://localhost:9545").expect("transport failure");
+    let http = Http::new("http://localhost:8545").expect("transport failure");
     let web3 = Web3::new(http);
 
     let instance = AbiTypes::builder(&web3)
@@ -60,6 +60,8 @@ async fn calls(instance: &AbiTypes) {
 
     debug_call!(instance.get_array());
     debug_call!(instance.get_fixed_array());
+
+    let _ = dbg!(instance.foo_struct((4, 2)).call().await);
 }
 
 async fn events(instance: &AbiTypes) {

@@ -104,6 +104,10 @@ pub enum ExecutionError {
     /// A stream ended unexpectedly.
     #[error("log stream ended unexpectedly")]
     StreamEndedUnexpectedly,
+
+    /// TODO
+    #[error("tokenization error: {0}")]
+    Tokenization(#[from] crate::tokens::Error),
 }
 
 impl From<Web3Error> for ExecutionError {

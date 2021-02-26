@@ -1,3 +1,4 @@
+/*
 use ethcontract::prelude::*;
 use std::env;
 
@@ -31,3 +32,5 @@ async fn main() {
 
     println!("npmjs ERC20 token {}", symbol);
 }
+*/
+fn main() {}

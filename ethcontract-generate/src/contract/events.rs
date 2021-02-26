@@ -73,7 +73,7 @@ fn expand_data_type(event: &Event, event_derives: &[Path]) -> Result<TokenStream
         .iter()
         .map(|(name, ty)| {
             quote! {
-                let #name = <#ty as self::ethcontract::web3::contract::tokens::Tokenizable>
+                let #name = <#ty as self::ethcontract::tokens::SingleTokenize>
                     ::from_token(tokens.next().unwrap())?;
             }
         })
@@ -102,17 +102,12 @@ fn expand_data_type(event: &Event, event_derives: &[Path]) -> Result<TokenStream
             }
         }
 
-        impl self::ethcontract::web3::contract::tokens::Detokenize for #event_name {
+        impl self::ethcontract::tokens::MultiTokenize for #event_name {
             fn from_tokens(
                 tokens: Vec<self::ethcontract::common::abi::Token>,
-            ) -> Result<Self, self::ethcontract::web3::contract::Error> {
+            ) -> Result<Self, self::ethcontract::tokens::Error> {
                 if tokens.len() != #params_len {
-                    return Err(self::ethcontract::web3::contract::Error::InvalidOutputType(format!(
-                        "Expected {} tokens, got {}: {:?}",
-                        #params_len,
-                        tokens.len(),
-                        tokens
-                    )));
+                    return Err(self::ethcontract::tokens::Error::A);
                 }
 
                 #[allow(unused_mut)]
@@ -120,6 +115,11 @@ fn expand_data_type(event: &Event, event_derives: &[Path]) -> Result<TokenStream
                 #( #read_param_token )*
 
                 Ok(#data_type_construction)
+            }
+
+            fn into_tokens(self) -> Vec<self::ethcontract::common::abi::Token> {
+                // TODO: maybe split up trait since this doesn't have to be implemented
+                unimplemented!()
             }
         }
     })

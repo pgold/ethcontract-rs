@@ -108,4 +108,18 @@ contract AbiTypes {
     emit ValueIndexed(getString(), getArray());
     emit Values(blockhash(block.number - 1), msg.sender);
   }
+
+  // Abi v2
+
+  struct S {
+    uint8 u0;
+    uint16 u1;
+  }
+
+  function fooSimple(uint8 u) public view {}
+  function fooStruct(S calldata s) public pure returns (S calldata) {
+    return s;
+  }
+  function takeArrayOfStruct(S[] calldata s) public view {}
+  function takeArrayOfArrayOfStruct(S[][3] calldata s) public view {}
 }
